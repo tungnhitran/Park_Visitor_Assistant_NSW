@@ -39,7 +39,7 @@ If you'd like an officer to reply directly by email, tell me the address now and
 
 **The officer's email** — the same ticket arrives in the officer inbox seconds later.
 
-![Escalation email received by the officer inbox](assets/email-ticket.png)
+![Escalation email received by the officer inbox](assets/email_ticket.png)
 
 GIFs play at 2x speed; click one for the full-speed video.
 
