@@ -14,22 +14,34 @@ An AI agent on **Microsoft Foundry** that answers NSW national park visitor ques
 
 ## Demo
 
-```
-$ python3 agent_runtime.py
-park-visitor-assistant  |  /tickets  /new  /quit
+**Grounded answer in the Foundry playground** — a visitor asks about parking fees; the agent answers from the indexed official documents and cites each one.
 
+[![Foundry playground demo](assets/foundry-playground.gif)](assets/foundry-playground.mp4)
+
+**Escalation from the terminal** — a visitor reports injured wildlife; the agent calls `escalate_to_officer`, the ticket is created, and the visitor gets the ticket ID straight away.
+
+[![Terminal escalation demo](assets/terminal-escalation.gif)](assets/terminal-escalation.mp4)
+
+```
 You: There's an injured wallaby near the Wattamolla car park in Royal National Park
 
-Agent: Thanks — I’ve created a task for a parks officer. Do NOT approach or handle the animal.
+Agent: Thanks — I've created a task for a parks officer. Do NOT approach or handle the animal.
 
-Ticket ID: NPWS-3CBC7AA3. An officer is expected to respond within 1 business hour. 
+Ticket ID: NPWS-3CBC7AA3. An officer is expected to respond within 1 business hour.
 
-If you’d like an officer to reply directly by email, tell me the address now and I’ll add it to the ticket.
-  tool call: escalate_to_officer {"reason":"injured_or_lost_wildlife","urgency":"high","park_name":"Royal National Park","summary":"Visitor reports an injured wallaby near the Wattamolla car park in Royal National Park and requests assistance. No contact details were provided in the report.","contact":null}
+If you'd like an officer to reply directly by email, tell me the address now and I'll add it to the ticket.
+  tool call: escalate_to_officer {"reason":"injured_or_lost_wildlife","urgency":"high",
+             "park_name":"Royal National Park","summary":"Visitor reports an injured wallaby near
+             the Wattamolla car park in Royal National Park and requests assistance. No contact
+             details were provided in the report.","contact":null}
   ticket created: NPWS-3CBC7AA3 (reply within 1 business hour, emailed to officer)
 ```
 
-The officer inbox receives an email titled `[NPWS-50598564] High urgency: Injured or lost wildlife, Royal National Park` with the ticket details.
+**The officer's email** — the same ticket arrives in the officer inbox seconds later.
+
+![Escalation email received by the officer inbox](assets/email-ticket.png)
+
+GIFs play at 2x speed; click one for the full-speed video.
 
 Suggested demo prompts:
 
@@ -39,7 +51,7 @@ Suggested demo prompts:
 4. "Is the Grand Canyon track open this weekend?" points to the park alerts page instead of guessing.
 5. "My friend fell off a ledge and isn't responding" gets "call 000" and no ticket.
 
-In the **Foundry playground** you can show cited answers, and the **Traces** tab shows each File Search call and the `escalate_to_officer` call with its arguments. The playground can't run local Python, so tickets and emails are created from the terminal.
+In the **Foundry playground** you can show cited answers, and the **Traces** tab shows each File Search call and the escalation call. With the local function tool, tickets and emails are created from the terminal only. With [cloud escalation](CLOUD_ESCALATION.md), Foundry calls an Azure Function directly, so the playground creates real tickets and emails too.
 
 ## Architecture
 
@@ -55,6 +67,8 @@ flowchart LR
     E -.->|optional webhook| W[Logic App / Teams]
 ```
 
+With [cloud escalation](CLOUD_ESCALATION.md), the same `escalation.py` runs in an Azure Function that Foundry calls through an OpenAPI tool, storing tickets in Table Storage.
+
 The agent decides *whether* to escalate and fills in a structured ticket (reason, urgency, park, summary). The client executes the call, saves and emails the ticket, and returns the ticket ID to the agent, which tells the visitor.
 
 ## Key design decisions
@@ -68,6 +82,8 @@ The agent decides *whether* to escalate and fills in a structured ticket (reason
 | Client-side function tool | Keeps validation, privacy and notifications in my code; easy to swap Gmail for ServiceNow or Teams. |
 | Strict JSON schema with enums | Tickets are routable by reason and urgency without an officer re-reading the chat. |
 | Queue first, email second | A failed email never loses a ticket or breaks the conversation. |
+| Never quote a ticket ID that isn't in the tool result | In testing, the playground returned an empty tool output and the model invented a plausible ticket ID. The instructions now forbid that. |
+| Separate keys for creating and reading tickets (cloud) | The agent's key can only create tickets, never read other visitors' reports. |
 | Emergencies bypass the tool | A ticket queue is the wrong channel for a life-threatening situation. |
 
 ## What testing changed
@@ -107,11 +123,11 @@ To build everything in code instead, put exported official pages (PDF or Markdow
 ## Testing
 
 ```bash
-pytest -q tests                  # 10 unit tests for the escalation tool and email, no Azure needed
+pytest -q tests                  # 15 unit tests (tool, email, Azure Function, OpenAPI spec), no Azure needed
 python3 -m evals.run_evals       # scenario evals against the live agent
 ```
 
-The unit tests cover strict-schema compatibility, ticket creation, invalid arguments returned to the model as errors, webhook and email failures that still queue the ticket, and email content (using a fake SMTP server).
+The unit tests cover strict-schema compatibility, ticket creation, invalid arguments returned to the model as errors, webhook and email failures that still queue the ticket, email content (using a fake SMTP server), the Azure Function endpoints (with Table Storage faked), and the OpenAPI spec.
 
 Scenario evals check behaviour, not exact wording: whether the agent escalated and with which reason, whether answers cite a source, emergency wording, and a prompt-injection case. Escalations are captured during evals, not sent or emailed.
 
@@ -130,11 +146,14 @@ Scenario evals check behaviour, not exact wording: whether the agent escalated a
 | `create_agent.py` | Alternative: index `knowledge/` and create the agent in code |
 | `agent_runtime.py` | Turn runner with the function-call loop, plus terminal chat |
 | `tests/`, `evals/` | Unit tests and behavioural scenario evals |
-| `function_app/` | In progress: escalation as an Azure Function (see below) |
+| `assets/` | Demo videos, GIF previews and screenshots |
+| `function_app/` | Escalation as an Azure Function (Table Storage + Gmail) |
+| `openapi_spec.py` | OpenAPI spec generated from the same schema as the local tool |
+| `use_cloud_escalation.py` | Switch the agent between the local tool and the Azure Function |
+| `CLOUD_ESCALATION.md` | Step-by-step deployment guide |
 
 ## What I'd do next
 
-- Host the escalation tool as an Azure Function behind an OpenAPI tool, so escalation also works in the Foundry playground and published channels (started in `function_app/`).
 - Add an `add_contact_to_ticket` tool so a visitor can attach an email to an existing ticket.
 - Refresh the knowledge base on a schedule from the official site.
 - Run Foundry's built-in evaluators (task adherence, coherence, safety) on the agent as a cloud evaluation.
