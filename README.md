@@ -16,7 +16,7 @@ An AI agent on **Microsoft Foundry** that answers NSW national park visitor ques
 
 **Grounded answer in the Foundry playground** — a visitor asks about parking fees; the agent answers from the indexed official documents and cites each one.
 
-[![Foundry playground demo](assets/foundry-playground.gif)](assets/foundry-playground.mp4)
+[![Foundry playground demo]](assets/foundry-playground.mp4)
 
 **Escalation from the terminal** — a visitor reports injured wildlife; the agent calls `escalate_to_officer`, the ticket is created, and the visitor gets the ticket ID straight away.
 
